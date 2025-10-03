@@ -1,0 +1,48 @@
+archivo task_sensor_attribute.h
+
+tipo de datos: 
+	enum: - task_sensor_ev_t: eventos
+		  - task_sensor_st_t: estados
+		  - task_sensor_id_t: id del boton
+	struct: - task_sensor_cfg_t: es la configuracion del boton
+			- task_sensor_dta_t: datos actuales (tick, state y event) del sensor 
+
+arrays:
+	task_sensor_dta_list[]: declarado como extern que se encuentra en el task_sensor.c
+
+metodos: n/a
+
+patrones de disenio: n/a
+
+----------------------------------
+archivo: task_sensor.c
+
+tipo de datos:
+	char: - *p_task_sensor
+		  - *p_task_sensor_
+	uint32_t: - g_task_sensor_tick_cnt: volatil, es un contador de ticks 
+			  - index
+			  - *p_task_sensor_dta 
+			  - state
+			  - event
+	task_sensor_dta_t 
+	task_sensor_st_t 
+	task_sensor_ev_t
+	bool: b_time_update_required
+	task_sensor_cfg_t 
+	
+
+arrays:
+	task_sensor_cfg_list[]: almacena {ID_BTN_A,  BTN_A_PORT,  BTN_A_PIN,  BTN_A_PRESSED, DEL_BTN_XX_MAX, EV_SYS_IDLE,  EV_SYS_LOOP_DET} 
+	task_sensor_dta_list[]: almacena {DEL_BTN_XX_MIN, ST_BTN_XX_UP, EV_BTN_XX_UP}
+
+
+metodos:
+	task_sensor_init(void *parameters): guarda los datos "task_sensor_dta_list" en el arreglo "p_task_sensor_dta"
+	task_sensor_update(void *parameters): cuando hay ticks llama a la funcion "task_sensor_statechart()"
+										  Función periódica que actualiza la lógica de los sensores cada vez que el hardware indica que ha pasado un tick.
+										  Se asegura de procesar todos los ticks acumulados y protege los contadores compartidos de interrupciones.
+	task_sensor_statechart(void): ejecuta el funcionamiento del sensor statechart (máquina de estados del sensor)
+	LOGGER_INFO(): es para imprimir en consola
+	
+patrones de disenio: n/a

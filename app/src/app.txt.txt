@@ -1,0 +1,138 @@
+Análisis de app.c
+Este módulo implementa el núcleo de la aplicación “Bare Metal – Event-Triggered Systems (ETS)”. Define la configuración y los datos de cada tarea, arranca el executor cíclico en app_init() y lo actualiza en app_update(). Además, usa la interrupción de SysTick para generar un sistema de temporización basado en contadores de ticks.
+
+
+
+
+Tipos de datos y macros
+G_APP_CNT_INI, G_APP_TICK_CNT_INI, TASK_X_WCET_INI, TASK_X_DELAY_MIN Macros que inicializan a cero contadores de aplicación, ticks, WCET y retardos mínimos.
+
+typedef struct task_cfg_t Estructura de configuración de tarea:
+
+void (*task_init)(void *)
+
+void (*task_update)(void *)
+
+void *parameters
+
+typedef struct task_dta_t Estructura de datos de tarea:
+
+uint32_t WCET – Tiempo máximo de ejecución en microsegundos.
+
+
+
+
+
+Arrays de estructuras de datos
+Array	Tipo	Descripción
+task_cfg_list	task_cfg_t[]	Lista constante de configuraciones para las tareas: sensor, system, actuator.
+task_dta_list	task_dta_t[]	Array dinámico (global) para almacenar el WCET de cada tarea.
+TASK_QTY se define como el número de elementos en task_cfg_list, garantizando que ambos arrays coincidan en longitud.
+
+
+
+
+
+Variables globales
+uint32_t g_app_cnt – Cuenta de ciclos completos de la aplicación.
+
+volatile uint32_t g_app_tick_cnt – Ticks pendientes de procesar (ms).
+
+uint32_t g_app_runtime_us – Tiempo acumulado de ejecución por ciclo (µs).
+
+g_task_sensor_tick_cnt, g_task_system_tick_cnt, g_task_actuator_tick_cnt – Contadores de ticks para temporizar cada tarea.
+
+
+
+
+
+Funciones principales
+app_init()
+Imprime mensajes de arranque usando LOGGER_INFO.
+
+Inicializa contadores (g_app_cnt, g_app_tick_cnt y ticks de cada tarea).
+
+Llama a cycle_counter_init() para preparar el contador de ciclos DWT.
+
+Recorre task_cfg_list, ejecutando cada task_init y dejando task_dta_list[i].WCET = 0.
+
+Protege la inicialización de contadores críticos deshabilitando interrupciones (CPSID i) y luego habilitándolas (CPSIE i).
+
+app_update()
+Comprueba y consume un tick de aplicación (g_app_tick_cnt) dentro de una zona crítica.
+
+Mientras haya ticks pendientes:
+
+Incrementa g_app_cnt y resetea g_app_runtime_us.
+
+Para cada tarea en task_cfg_list:
+
+Reinicia el contador de ciclos (cycle_counter_reset()).
+
+Llama a la función task_update.
+
+Obtiene el tiempo gastado (cycle_counter_get_time_us()) y:
+
+Lo suma a g_app_runtime_us.
+
+Actualiza el campo WCET si supera el anterior.
+
+Vuelve a comprobar dentro de zona crítica si quedan más ticks.
+
+HAL_SYSTICK_Callback()
+Se ejecuta automáticamente cada 1 ms por la HAL. Incrementa los contadores:
+
+g_app_tick_cnt
+
+g_task_sensor_tick_cnt
+
+g_task_system_tick_cnt
+
+g_task_actuator_tick_cnt
+
+Esto integra el SysTick con el executor de tareas.
+
+
+
+
+
+Patrones de diseño de software
+Ejecutor cíclico (Superloop): implementa un scheduler cooperativo sin RTOS, disparado por SysTick.
+
+Tablas de tareas: usa un array de estructuras de configuración (task_cfg_list) para abstraer e iterar sobre tareas sin condicionales repetitivos.
+
+Función callback: desacopla temporización (SysTick) de lógica de aplicación.
+
+Inversión de control: las tareas no llaman directamente al scheduler; el scheduler invoca sus callbacks init y update.
+
+Protección de recurso compartido: zonas críticas delimitadas con instrucciones ASM CPSID/CPSIE para coherencia de contadores ante interrupciones.
+
+Medición de rendimiento: usa el contador de ciclos DWT (Data Watchpoint and Trace) para calcular WCET y runtime, habilitando análisis de tiempo de ejecución.
+
+
+
+
+Flujo de temporización y medición
+Al iniciar, cycle_counter_init() configura el DWT para contar ciclos de CPU.
+
+Antes de cada task_update, cycle_counter_reset() marca el inicio de medición.
+
+Tras la ejecución, cycle_counter_get_time_us() convierte ciclos en microsegundos y:
+
+Acumula en g_app_runtime_us.
+
+Ajusta el WCET en task_dta_list.
+
+Esta métrica permite detectar desbordes de tiempo y analizar el comportamiento en tiempo real del superloop.
+
+
+
+
+
+
+
+
+
+
+
+

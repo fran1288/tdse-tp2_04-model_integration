@@ -1,0 +1,130 @@
+Análisis de main.c
+Este main.c implementa la rutina de arranque y el ciclo principal (superloop) de una aplicación embebida sobre un STM32. Se basa en la HAL de ST para inicializar el microcontrolador, configurar el reloj del sistema, los periféricos GPIO y UART, y luego delega la lógica de la aplicación a dos funciones de alto nivel (app_init y app_update).
+
+
+
+Visión General del Flujo
+Se inicializa el soporte de semihosting para debug (opcional).
+
+Se invoca HAL_Init() para resetear periféricos, configurar el Systick y preparar la HAL.
+
+Se configura el reloj del sistema con SystemClock_Config().
+
+Se inicializan GPIO y UART2 con MX_GPIO_Init() y MX_USART2_UART_Init().
+
+Se llama app_init() para preparar el ejecutor cíclico de tareas.
+
+Entra en un bucle infinito donde cada iteración llama a app_update(), que actualiza las tareas de la aplicación.
+
+
+
+
+Tipos de Datos
+int main(void): punto de entrada de la aplicación.
+
+UART_HandleTypeDef huart2: handle que describe la instancia y parámetros de UART2.
+
+RCC_OscInitTypeDef y RCC_ClkInitTypeDef: estructuras que recogen la configuración de osciladores y divisores de bus.
+
+GPIO_InitTypeDef: estructura que define el pin, modo, pull y velocidad para un puerto GPIO.
+
+Macros de usuario (LOGGER_CONFIG_USE_SEMIHOSTING) para activar semihosting.
+
+
+
+
+Estructuras de Datos de HAL
+
+Estructura		Campos clave
+
+RCC_OscInitTypeDef	OscillatorType; HSIState; PLL.PLLState; PLL.PLLMUL
+RCC_ClkInitTypeDef	ClockType; SYSCLKSource; AHBCLKDivider; APB1CLKDivider
+UART_HandleTypeDef	Instance; Init.BaudRate; Init.WordLength; Init.Mode
+GPIO_InitTypeDef	Pin; Mode; Pull; Speed
+Cada estructura se inicializa con valores literales antes de pasarla a HAL_RCC_OscConfig, HAL_RCC_ClockConfig, HAL_UART_Init o HAL_GPIO_Init.
+
+
+
+
+Métodos y Funciones
+Inicialización global
+
+initialise_monitor_handles(): activa semihosting si está habilitado.
+
+HAL_Init(): configura SysTick a 1 ms y restaura periféricos.
+
+SystemClock_Config(): ajusta HSI, PLL y divisores para obtener la frecuencia deseada.
+
+Configuración de periféricos
+
+MX_GPIO_Init():
+
+Habilita relojes en GPIOC, GPIOD, GPIOA, GPIOB.
+
+Configura B1 como entrada con interrupción por flanco de subida.
+
+Configura LD2 (LED) como salida push-pull.
+
+Activa NVIC para EXTI15_10_IRQn.
+
+MX_USART2_UART_Init(): inicializa huart2 en 115200 Baud, 8N1, sin control de flujo.
+
+Ciclo principal
+
+app_init(): arranca el ejecutor cíclico de tareas (inicializa datos y contadores).
+
+app_update(): se llama cada iteración; dispara tareas periódicas basadas en ticks de aplicación.
+
+Manejo de errores
+
+Error_Handler(): deshabilita interrupciones y entra en bucle infinito ante fallo en configuración.
+
+assert_failed(): gancho para chequeos de parámetros (solo si USE_FULL_ASSERT está definido).
+
+
+
+
+
+Patrones de Diseño de Software
+Superloop (Cyclic Executive) El while(1) en main forma el núcleo de un ejecutor de tareas, sin RTOS.
+
+Separación de capas main.c se encarga solo de la plataforma y arranque; la lógica de aplicación vive en app.c.
+
+Inversión de control El código de usuario (app) no invoca directamente HAL para inicializar hardware; se apoya en funciones de configuración centralizadas.
+
+Modularidad Cada periférico se inicializa en su función dedicada (MX_*_Init), facilitando la lectura y el mantenimiento.
+
+Abstracción de hardware Uso de la HAL para aislar detalles de registros de bajo nivel.
+
+Configuración condicional El semihosting se activa solo si la macro LOGGER_CONFIG_USE_SEMIHOSTING está en 1, lo que permite builds de debug/release diferentes.
+
+
+
+
+Evolución de SysTick y SystemCoreClock
+HAL_Init(): configura SysTick para generar una interrupción cada 1 ms y actualiza uwTick.
+
+SystemClock_Config(): ajusta SystemCoreClock para reflejar la frecuencia derivada de HSI/PLL.
+
+Entre HAL_Init() y app_init(): uwTick y SystemCoreClock pasan de sus valores por defecto a los finales definidos por el PLL.
+
+
+
+
+
+Consideraciones adicionales
+Más allá de main.c, puedes profundizar en:
+
+Cómo medir el tiempo de ejecución real (g_app_runtime_us) usando el SysTick.
+
+Estrategias para extender el patrón superloop a múltiples tareas con distintos periodos.
+
+Integración de interrupciones de botón (B1) con HAL_GPIO_EXTI_Callback.
+
+Uso de LOGGER_INFO() para trazar y su impacto en tiempos de ciclo y WCET.
+
+
+
+
+
+
